@@ -1,7 +1,0 @@
-{
-    "routes": [
-      { "src": "/set_webhook", "dest": "api/index.py" },
-      { "src": "/.*", "dest": "api/index.py" }
-    ]
-  }
-  
