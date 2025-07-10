@@ -17,7 +17,13 @@ from telegram.ext import (
 import asyncio
 
 # --- ЛОГИРОВАНИЕ ---
-logging.basicConfig(level=logging.INFO)
+import sys
+
+logging.basicConfig(
+    stream=sys.stdout,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
 logger = logging.getLogger(__name__)
 
 # --- ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ ---
@@ -71,6 +77,7 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # --- Обработчик /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"/start от chat_id={update.effective_chat.id}")
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="Привет! 👋 Отправь мне ссылку на статью — я сделаю пост для Telegram.",
@@ -79,6 +86,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Обработчик всех текстов ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(
+        f"Текстовое сообщение от chat_id={update.effective_chat.id}: {update.message.text}"
+    )
     text = update.message.text
     match = re.search(r"https?://\S+", text)
     if match:
@@ -118,7 +128,13 @@ def set_webhook():
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
     try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
+        logger.info("Webhook вызван — получили POST от Telegram.")
+        data = request.get_json(force=True)
+        logger.info(f"Raw update: {data}")
+        update = Update.de_json(data, application.bot)
+        logger.info(
+            f"Update успешно десериализован. От chat_id={update.effective_chat.id if update.effective_chat else 'unknown'}"
+        )
         asyncio.get_event_loop().create_task(application.process_update(update))
         return jsonify({"ok": True})
     except Exception as e:
