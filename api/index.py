@@ -73,6 +73,7 @@ def process_url(url: str) -> str:
 
 # --- Telegram Application ---
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+asyncio.run(application.initialize())
 
 
 # --- Обработчик /start ---
@@ -142,12 +143,8 @@ def telegram_webhook():
             f"Update успешно десериализован. От chat_id={update.effective_chat.id if update.effective_chat else 'unknown'}"
         )
 
-        async def process():
-            await application.initialize()
-            await application.process_update(update)
-            await application.shutdown()
-
-        asyncio.run(process())
+        # Только обрабатываем — без initialize/shutdown
+        asyncio.run(application.process_update(update))
 
         return jsonify({"ok": True})
     except Exception as e:
