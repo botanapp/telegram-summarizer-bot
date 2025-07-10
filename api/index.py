@@ -6,7 +6,7 @@ import google.generativeai as genai
 import requests
 
 from flask import Flask, request, jsonify
-
+from asyncio import run
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
@@ -144,8 +144,12 @@ def telegram_webhook():
 # --- ХЕНДЛЕР ДЛЯ УСТАНОВКИ ВЕБХУКА ---
 @flask_app.route("/set_webhook", methods=["GET"])
 def set_webhook():
-    success = application.bot.set_webhook(url=WEBHOOK_URL)
-    return "webhook setup ok" if success else "webhook setup failed"
+    try:
+        run(application.bot.set_webhook(url=WEBHOOK_URL))
+        return "webhook setup ok"
+    except Exception as e:
+        logger.error(f"Ошибка при установке webhook: {e}")
+        return "webhook setup failed"
 
 
 # --- ДЛЯ VERCEL: экспорт Flask app как `app` ---
