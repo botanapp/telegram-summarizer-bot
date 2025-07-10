@@ -135,7 +135,10 @@ def telegram_webhook():
         logger.info(
             f"Update успешно десериализован. От chat_id={update.effective_chat.id if update.effective_chat else 'unknown'}"
         )
-        asyncio.get_event_loop().create_task(application.process_update(update))
+
+        # Ключевая строка:
+        asyncio.run(application.process_update(update))
+
         return jsonify({"ok": True})
     except Exception as e:
         logger.error(f"Ошибка в webhook-хендлере: {e}")
