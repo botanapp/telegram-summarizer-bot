@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # --- ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-BASE_URL = os.environ.get("BASE_URL")  # https://your-vercel-app.vercel.app
+BASE_URL = os.environ.get("BASE_URL").rstrip("/")  # https://your-vercel-app.vercel.app
 WEBHOOK_PATH = f"/{TELEGRAM_TOKEN}"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
