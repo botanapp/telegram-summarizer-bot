@@ -59,37 +59,43 @@ def process_url(url: str) -> str:
 
 
 # Создаём Application (бот)
+
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 
-@application.message()
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
+    # Проверка, что это действительно сообщение
+    if not update.message or not update.message.text:
         return
 
     text = update.message.text
     chat_id = update.message.chat_id
 
-    if text == "/start":
+    if text.strip() == "/start":
         await context.bot.send_message(
             chat_id=chat_id,
-            text="Привет! 👋 Отправь мне ссылку на статью...",
+            text="Привет! 👋 Отправь мне ссылку на статью, и я сделаю из неё пост для твоего канала.",
         )
         return
 
+    # Поиск первой ссылки в сообщении
     url_match = re.search(r"https?://\S+", text)
     if url_match:
         url = url_match.group(0)
         await context.bot.send_message(
-            chat_id=chat_id, text="Обрабатываю ссылку... 🧙‍♂️"
+            chat_id=chat_id, text="Принял ссылку. Начинаю обработку... 🧙‍♂️"
         )
+
+        # Обработка ссылки (вызов твоей функции)
         summary = process_url(url)
+
         await context.bot.send_message(
             chat_id=chat_id, text=summary, disable_web_page_preview=True
         )
     else:
         await context.bot.send_message(
-            chat_id=chat_id, text="Отправь ссылку на статью."
+            chat_id=chat_id,
+            text="Пожалуйста, отправь мне корректную ссылку, начинающуюся с http:// или https://",
         )
 
 
