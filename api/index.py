@@ -142,7 +142,11 @@ def telegram_webhook():
             f"Update успешно десериализован. От chat_id={update.effective_chat.id if update.effective_chat else 'unknown'}"
         )
 
-        # Ключевая строка:
+        async def process():
+            await application.initialize()
+            await application.process_update(update)
+            await application.shutdown()
+
         asyncio.run(process())
 
         return jsonify({"ok": True})
