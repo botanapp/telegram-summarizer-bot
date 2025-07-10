@@ -172,7 +172,7 @@ def telegram_webhook():
         )
 
         # Используем ранее созданный loop — без закрытия
-        loop.create_task(application.process_update(update))
+        loop.run_until_complete(application.process_update(update))
 
         return jsonify({"ok": True})
     except Exception as e:
