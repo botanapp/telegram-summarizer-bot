@@ -61,6 +61,7 @@ def process_url(url: str) -> str:
 # Создаём Application (бот)
 
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+from telegram.ext import MessageHandler, filters
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -97,6 +98,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id,
             text="Пожалуйста, отправь мне корректную ссылку, начинающуюся с http:// или https://",
         )
+
+
+application.add_handler(MessageHandler(filters.TEXT, handle_message))
 
 
 # Webhook endpoint для Telegram
