@@ -45,7 +45,32 @@ app = flask_app  # для Vercel
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-pro")
 
-PROMPT = """..."""  # как у тебя
+PROMPT = """
+Ты — ассистент, который помогает вести Telegram-канал.
+Твоя задача — на основе текста веб-страницы сделать краткую и емкую заметку на русском языке.
+
+Инструкции:
+1.  Внимательно изучи предоставленный текст.
+2.  Определи главную идею, ключевые тезисы и выводы.
+3.  Напиши саммари (краткую выжимку) на русском языке. Объем — 3-5 абзацев.
+4.  Стиль должен быть информативным, но легким для чтения, как для поста в Telegram.
+5.  Придумай яркий и цепляющий заголовок для поста.
+6.  Подбери 3-5 релевантных хештега.
+7.  В конце добавь эмодзи, соответствующий теме.
+
+Структура ответа:
+[Заголовок]
+
+[Текст саммари]
+
+[Хештеги]
+[Эмодзи]
+
+Вот текст для обработки:
+---
+{text}
+---
+"""
 
 
 # --- Обработка статьи ---
@@ -72,8 +97,11 @@ def process_url(url: str) -> str:
 
 
 # --- Telegram Application ---
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 application = Application.builder().token(TELEGRAM_TOKEN).build()
-asyncio.run(application.initialize())
+loop.run_until_complete(application.initialize())
 
 
 # --- Обработчик /start ---
@@ -143,8 +171,8 @@ def telegram_webhook():
             f"Update успешно десериализован. От chat_id={update.effective_chat.id if update.effective_chat else 'unknown'}"
         )
 
-        # Только обрабатываем — без initialize/shutdown
-        asyncio.run(application.process_update(update))
+        # Используем ранее созданный loop — без закрытия
+        loop.create_task(application.process_update(update))
 
         return jsonify({"ok": True})
     except Exception as e:
