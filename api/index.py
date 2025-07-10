@@ -124,6 +124,12 @@ def set_webhook():
         return "webhook setup failed"
 
 
+async def process():
+    await application.initialize()
+    await application.process_update(update)
+    await application.shutdown()
+
+
 # --- Webhook обработчик (/TOKEN) ---
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
@@ -137,7 +143,7 @@ def telegram_webhook():
         )
 
         # Ключевая строка:
-        asyncio.run(application.process_update(update))
+        asyncio.run(process())
 
         return jsonify({"ok": True})
     except Exception as e:
