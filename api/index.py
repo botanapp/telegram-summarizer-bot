@@ -129,10 +129,13 @@ application.add_handler(MessageHandler(filters.TEXT, handle_message))
 
 # --- ВЕБХУК-ХЕНДЛЕР ---
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
-async def telegram_webhook():
+def telegram_webhook():
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
+        # Запускаем асинхронную обработку через run_coroutine_threadsafe
+        from asyncio import get_event_loop, run_coroutine_threadsafe
+
+        run_coroutine_threadsafe(application.process_update(update), application.loop)
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса от Telegram: {e}")
     return jsonify({"ok": True})
