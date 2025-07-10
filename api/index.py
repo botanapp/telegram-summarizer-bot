@@ -1,49 +1,42 @@
 import os
 import logging
 import re
+import requests
 import trafilatura
 import google.generativeai as genai
-import requests
 
 from flask import Flask, request, jsonify
 from telegram import Update
 from telegram.ext import (
     Application,
     ContextTypes,
-    MessageHandler,
     CommandHandler,
+    MessageHandler,
     filters,
 )
+
 import asyncio
 
-# --- ЛОГИРОВАНИЕ ---
-import sys
-
-logging.basicConfig(
-    stream=sys.stdout,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
+# --- Настройка логов ---
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ ---
+# --- Переменные окружения ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-BASE_URL = os.environ.get("BASE_URL").rstrip("/")  # https://your-vercel-app.vercel.app
+BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")  # без завершающего /
+
 WEBHOOK_PATH = f"/{TELEGRAM_TOKEN}"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
-# --- Проверки ---
-if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN не задан")
-
-# --- Flask-приложение ---
+# --- Настройка Flask ---
 flask_app = Flask(__name__)
 app = flask_app  # для Vercel
 
 # --- Настройка Gemini ---
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-pro")
+
 
 PROMPT = """
 Ты — ассистент, который помогает вести Telegram-канал.
@@ -73,73 +66,89 @@ PROMPT = """
 """
 
 
-# --- Обработка статьи ---
 def process_url(url: str) -> str:
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        text = trafilatura.extract(
-            response.text,
-            include_comments=False,
-            include_tables=False,
-            no_fallback=True,
-        )
-
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        text = trafilatura.extract(resp.text, no_fallback=True)
         if not text or len(text) < 200:
             return "Не удалось извлечь текст страницы."
         text = text[:15000]
         result = model.generate_content(PROMPT.format(text=text))
         return result.text
     except Exception as e:
-        logger.error(f"Ошибка при обработке URL: {e}")
-        return "Ошибка при обработке ссылки."
+        logger.error(f"Ошибка при обработке ссылки: {e}")
+        return "Ошибка при обработке страницы."
 
 
-# --- Telegram Application ---
+# --- Инициализация и запуск Telegram Application ---
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
-
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 loop.run_until_complete(application.initialize())
 
 
-# --- Обработчик /start ---
+# --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"/start от chat_id={update.effective_chat.id}")
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="Привет! 👋 Отправь мне ссылку на статью — я сделаю пост для Telegram.",
+        text="Привет! 👋 Отправь мне ссылку — и я создам пост.",
     )
 
 
-# --- Обработчик всех текстов ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(
-        f"Текстовое сообщение от chat_id={update.effective_chat.id}: {update.message.text}"
+        f"Получено сообщение от {update.effective_chat.id}: {update.message.text}"
     )
-    text = update.message.text
-    match = re.search(r"https?://\S+", text)
+    match = re.search(r"https?://\S+", update.message.text)
     if match:
         url = match.group(0)
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text="Обрабатываю ссылку..."
+            chat_id=update.effective_chat.id, text="Обрабатываю ссылку... 🧙‍♂️"
         )
-        result = process_url(url)
+        summary = process_url(url)
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text=result, disable_web_page_preview=True
+            chat_id=update.effective_chat.id,
+            text=summary,
+            disable_web_page_preview=True,
         )
     else:
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text="Пожалуйста, пришли ссылку."
+            chat_id=update.effective_chat.id, text="Пожалуйста, отправь ссылку."
         )
 
 
-# --- Регистрируем хендлеры ---
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-# --- /set_webhook (синхронно!) ---
+
+# --- Webhook обработка ---
+@flask_app.route(WEBHOOK_PATH, methods=["POST"])
+def webhook():
+    try:
+        logger.info("Webhook вызван — получили POST от Telegram.")
+        data = request.get_json(force=True)
+        logger.info(f"Raw update: {data}")
+        update = Update.de_json(data, application.bot)
+        logger.info(
+            f"Update успешно десериализован. От chat_id={update.effective_chat.id}"
+        )
+
+        # Используем loop, без закрытия
+        future = asyncio.run_coroutine_threadsafe(
+            application.process_update(update), loop
+        )
+        future.result(timeout=10)  # дождаться результата, иначе завершится слишком рано
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.error(f"Ошибка в webhook-хендлере: {e}")
+        return jsonify({"ok": False})
+
+
+# --- Установка webhook ---
 from asyncio import run
 
 
@@ -149,32 +158,5 @@ def set_webhook():
         run(application.bot.set_webhook(url=WEBHOOK_URL))
         return "webhook setup ok"
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        logger.error(f"Ошибка установки webhook: {e}")
         return "webhook setup failed"
-
-
-async def process():
-    await application.initialize()
-    await application.process_update(update)
-    await application.shutdown()
-
-
-# --- Webhook обработчик (/TOKEN) ---
-@flask_app.route(WEBHOOK_PATH, methods=["POST"])
-def telegram_webhook():
-    try:
-        logger.info("Webhook вызван — получили POST от Telegram.")
-        data = request.get_json(force=True)
-        logger.info(f"Raw update: {data}")
-        update = Update.de_json(data, application.bot)
-        logger.info(
-            f"Update успешно десериализован. От chat_id={update.effective_chat.id if update.effective_chat else 'unknown'}"
-        )
-
-        # Используем ранее созданный loop — без закрытия
-        loop.run_until_complete(application.process_update(update))
-
-        return jsonify({"ok": True})
-    except Exception as e:
-        logger.error(f"Ошибка в webhook-хендлере: {e}")
-        return jsonify({"ok": False})
